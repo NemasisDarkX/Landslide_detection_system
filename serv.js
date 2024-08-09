@@ -1,26 +1,59 @@
 const express = require('express');
 const axios = require('axios');
+const mongoose = require('mongoose');
+
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Constants for the calculation
-const WATER_ABSORPTION_FACTOR = 0.7;
-const CRITICAL_SOIL_MOISTURE_LEVEL = 50;
+// Connect to MongoDB
+mongoose.connect('mongodb+srv://stdevilkin666:b6zdq8a0L03WOQ63@cluster0-0.0f4ot.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0-0', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+}).then(() => console.log('MongoDB connected'))
+  .catch(err => console.log(err));
 
-// Sample soil moisture storage (in practice, use a database)
-let soilMoistureData = {};
+// Define a schema and model for soil moisture data
+const soilMoistureSchema = new mongoose.Schema({
+  timestamp: { type: Date, default: Date.now },
+  moisture: Number
+});
+
+const SoilMoisture = mongoose.model('SoilMoisture', soilMoistureSchema);
+
+// Root route to display the current readings
+app.get('/', async (req, res) => {
+  try {
+    // Fetch the latest soil moisture reading from the database
+    const latestReading = await SoilMoisture.findOne().sort({ timestamp: -1 });
+
+    if (latestReading) {
+      res.send(`Welcome to the Landslide Detection System API.<br><br>
+        <b>Latest Soil Moisture Reading:</b><br>
+        Moisture Level: ${latestReading.moisture}%<br>
+        Timestamp: ${latestReading.timestamp}<br><br>
+        Use /update?moisture=<value> to update soil moisture data.`);
+    } else {
+      res.send(`Welcome to the Landslide Detection System API.<br><br>
+        <b>No soil moisture data available yet.</b><br>
+        Use /update?moisture=<value> to add the first data.`);
+    }
+  } catch (error) {
+    res.status(500).send('Error fetching data from the database.');
+  }
+});
 
 // Route to update soil moisture data
 app.get('/update', async (req, res) => {
   const moisture = parseInt(req.query.moisture);
-  const timestamp = new Date().toISOString();
-  
-  // Store the received soil moisture value
-  soilMoistureData[timestamp] = moisture;
+  const timestamp = new Date();
+
+  // Save the received soil moisture value to the database
+  const moistureEntry = new SoilMoisture({ moisture });
+  await moistureEntry.save();
 
   // Fetch weather data and calculate the risk
   const riskMessage = await calculateLandslideRisk(moisture);
-  
+
   res.send(`Received soil moisture: ${moisture}. ${riskMessage}`);
 });
 
